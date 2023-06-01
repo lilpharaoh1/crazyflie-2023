@@ -45,8 +45,6 @@ def take_off_simple(scf):
         time.sleep(3)
         mc.left(0.5, 0.3)
         time.sleep(3)
-        mc.go_to(1,1,1.5)
-        time.sleep(2)
         mc.land()
 
 
@@ -54,14 +52,6 @@ if __name__ == '__main__':
     cflib.crtp.init_drivers()
 
     with SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache')) as scf:
-
-        # scf.cf.param.add_update_callback(group='deck', name='bcFlow2',
-        #                                  cb=param_deck_flow)
         
         time.sleep(3)
-
-        # if not deck_attached_event.wait(timeout=5):
-        #     print('No flow deck detected!')
-        #     sys.exit(1)
-
         take_off_simple(scf)
