@@ -8,7 +8,7 @@ import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
-from cflib.positioning.position_hl_commander import PositionHlCommander
+from cflib.positioning.motion_commander import MotionCommander
 from cflib.crazyflie.syncLogger import SyncLogger
 
 
@@ -16,6 +16,11 @@ from cflib.crazyflie.syncLogger import SyncLogger
 from cflib.utils import uri_helper
 
 URI = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
+DEFAULT_VELOCITY = 0.2
+WAYPOINTS = np.transpose(np.array([[0.0,  0.0,  1.0],
+                                   [1.0,  1.0,  1.0],
+                                   [1.5,  1.3,  1.0]]))
+
 
 class Drone: 
     def __init__(self, waypoints=None):
@@ -24,7 +29,7 @@ class Drone:
         self.pose = np.zeros((6, 1))
         self.drive = np.zeros((3, 1))
         self.waypoints = waypoints
-        self.obj = None#self.waypoints[0]
+        self.obj = None if not len(self.waypoints) else self.waypoints[0]
         self.done = False
         # self.scf = 
 
@@ -45,21 +50,32 @@ class Drone:
                 break
 
     def at(self, point):
-        return [abs(point[idx]-self.pose[idx, 0]) < 0.1 for idx in range(3)]
+        if [abs(point[idx]-self.pose[idx, 0]) < 0.1 for idx in range(3)]:
+            return True
+        return False
+    
+    def waypoint_select(self, at):
+        if not at:
+            return self.obj
+        np.delete(self.waypoints, 0, axis=0)
+        self.obj = None if not len(self.waypoints) else self.waypoints[0]
 
-    def calc_distance(self):
-        if isinstance(self.obj, np.ndarray):
-            return self.obj - self.pose[0:3]
-        return [[0], [0], [0]]
+    def calc_obj_distance(self):
+        return self.obj - self.pose[0:3]
 
     def spin(self):
         with SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache')) as scf:
             time.sleep(1)
             while(not self.done):
                 self.log_pose(scf)
-                print(self.pose)
-                print(self.at([0,0,0]))
-                time.sleep(0.05)
+                self.waypoint_select(self.at(self.obj))
+                with MotionCommander(scf, default_height=self.pose[2,0]) as mc:
+                    if self.obj == None:
+                            mc.land()
+                            time.sleep(3)
+                            break
+                    distance = self.calc_obj_distance()
+                    mc.move_distance(distance[0,0], distance[1,0], distance[2,0], velocity=DEFAULT_VELOCITY)
 
-drone = Drone()
+drone = Drone(waypoints=WAYPOINTS)
 drone.spin()
