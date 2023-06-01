@@ -43,7 +43,6 @@ def simple_log_async(scf, logconf):
     logconf.start()
     # time.sleep(1)
     # logconf.stop()
-    
 
 if __name__ == '__main__':
     cflib.crtp.init_drivers()
