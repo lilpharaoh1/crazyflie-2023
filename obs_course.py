@@ -36,12 +36,13 @@ class Drone:
     def log_pose(self, scf):
         with SyncLogger(scf, self.logger) as logger:
 
-            for idx, log_entry in enumerate(logger):
+            for log_entry in logger:
+                _, data, _ = log_entry
 
-                self.pose[0,0] = log_entry[0]
-                self.pose[1,0] = log_entry[1]
-                self.pose[2,0] = log_entry[2]
-
+                self.pose[0, 0] = data['stateEstimate.x']
+                self.pose[1, 0] = data['stateEstimate.y']
+                self.pose[2, 0] = data['stateEstimate.z']
+                break
 
     def at(self, point):
         return [abs(point[idx]-self.pose[idx, 0]) < 0.1 for idx in range(3)]
@@ -57,7 +58,8 @@ class Drone:
             while(not self.done):
                 self.log_pose(scf)
                 print(self.pose)
-                time.sleep(1)
+                print(self.at([0,0,0]))
+                time.sleep(0.05)
 
 drone = Drone()
 drone.spin()
