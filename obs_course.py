@@ -9,6 +9,7 @@ from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.positioning.motion_commander import MotionCommander
+from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.crazyflie.syncLogger import SyncLogger
 
 
@@ -18,9 +19,15 @@ from cflib.utils import uri_helper
 URI = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
 DEFAULT_VELOCITY = 0.75
 POINT_TOLERANCE = 0.2
-WAYPOINTS = np.array([[0.0,  0.0,  1.0],
-                      [1.0,  1.0,  1.0],
-                      [1.5,  1.3,  1.0]])
+WAIT_TIME = 1.0
+waypoints = np.array([[0.0,  0.0,  1.0],
+                      [0.3,  0.3,  1.0],
+                      [-0.4,  -0.3,  1.0]])#,
+                    #   [-0.4, 0.3, 1.0],
+                    #   [0.0, -0.3, 0.5],
+                    #   [0.0, -0.3, 1.3],
+                    #   [0.0, 0.3, 1.0],
+                    #   [0.0, 0.0, 1.0]])
 
 
 class Drone: 
@@ -38,26 +45,24 @@ class Drone:
         self.logger.add_variable('stateEstimate.y', 'float')
         self.logger.add_variable('stateEstimate.z', 'float')
 
-    def log_pose(self, scf):
-        with SyncLogger(scf, self.logger) as logger:
+    def log_pose(self, scf, logger):
+        for log_entry in logger:
+            _, data, _ = log_entry
 
-            for log_entry in logger:
-                _, data, _ = log_entry
-
-                self.pose[0, 0] = data['stateEstimate.x']
-                self.pose[1, 0] = data['stateEstimate.y']
-                self.pose[2, 0] = data['stateEstimate.z']
-                break
+            self.pose[0, 0] = data['stateEstimate.x']
+            self.pose[1, 0] = data['stateEstimate.y']
+            self.pose[2, 0] = data['stateEstimate.z']
+            break
 
     def at(self, point):
-        if [abs(point[idx]-self.pose[idx, 0]) < POINT_TOLERANCE for idx in range(3)]:
+        if np.allclose(point, self.pose[0:3], atol=POINT_TOLERANCE):
             return True
         return False
     
     def waypoint_select(self, at):
         if not at:
             return self.obj
-        np.delete(self.waypoints, 0, axis=0)
+        self.waypoints = np.delete(self.waypoints, 0, axis=0)
         self.obj = None if not len(self.waypoints) else self.waypoints[0].reshape((3,1))
 
     def calc_obj_distance(self):
@@ -65,19 +70,20 @@ class Drone:
 
     def spin(self):
         with SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache')) as scf:
-            with MotionCommander(scf, default_height=0.01) as mc:
-                while(not self.done):
-                    print("------------------------")
-                    self.log_pose(scf)
-                    self.waypoint_select(self.at(self.obj))
-                    print(self.pose[0:3], self.obj)
-                    if not isinstance(self.obj, np.ndarray):
-                        self.done = True
-                        mc.land()
-                        time.sleep(3)
-                        break
-                    distance = self.calc_obj_distance()
-                    mc.move_distance(distance[0,0], distance[1,0], distance[2,0], velocity=DEFAULT_VELOCITY)
+            with PositionHlCommander(scf, default_height=0.01) as mc:
+                with SyncLogger(scf, self.logger) as logger:
+                    while(not self.done):
+                        print("------------------------")
+                        self.log_pose(scf, logger)
+                        self.waypoint_select(self.at(self.obj))
+                        print(self.pose[0:3], self.obj)
+                        if not isinstance(self.obj, np.ndarray):
+                            self.done = True
+                            mc.land()
+                            time.sleep(3)
+                            break
+                        mc.go_to(self.obj[0,0], self.obj[1,0], self.obj[2,0])
+                        time.sleep(WAIT_TIME)
 
-drone = Drone(waypoints=WAYPOINTS)
+drone = Drone(waypoints=waypoints)
 drone.spin()
