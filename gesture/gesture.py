@@ -1,79 +1,96 @@
-# TechVidvan hand Gesture Recognizer
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import logging
+import sys
+import time
 
-# import necessary packages
+import cflib.crtp
+from cflib.crazyflie import Crazyflie
+from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
+from cflib.positioning.motion_commander import MotionCommander
+from cflib.utils import uri_helper
+from cflib.utils.multiranger import Multiranger
 
-import cv2
-import numpy as np
-import mediapipe as mp
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-
-# initialize mediapipe
-mpHands = mp.solutions.hands
-hands = mpHands.Hands(max_num_hands=1, min_detection_confidence=0.7)
-mpDraw = mp.solutions.drawing_utils
-
-# Load the gesture recognizer model
-model = load_model('mp_hand_gesture')
-
-# Load class names
-f = open('gesture.names', 'r')
-classNames = f.read().split('\n')
-f.close()
-print(classNames)
+URI = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
+VELOCITY = 0.5
+inputs = [0, 1, 2, 3, 2, 1, 0]
 
 
-# Initialize the webcam
-cap = cv2.VideoCapture(0)
+if len(sys.argv) > 1:
+    URI = sys.argv[1]
 
-while True:
-    # Read each frame from the webcam
-    _, frame = cap.read()
+# Only output errors from the logging framework
+logging.basicConfig(level=logging.ERROR)
 
-    x, y, c = frame.shape
 
-    # Flip the frame vertically
-    frame = cv2.flip(frame, 1)
-    framergb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+def is_close(range):
+    MIN_DISTANCE = 0.2  # m
 
-    # Get hand landmark prediction
-    result = hands.process(framergb)
+    if range is None:
+        return False
+    else:
+        return range < MIN_DISTANCE
 
-    # print(result)
-    
-    className = ''
 
-    # post process the result
-    if result.multi_hand_landmarks:
-        landmarks = []
-        for handslms in result.multi_hand_landmarks:
-            for lm in handslms.landmark:
-                # print(id, lm)
-                lmx = int(lm.x * x)
-                lmy = int(lm.y * y)
+class Drone:
+    def __init__(self, default_height=0.3):
+        pass
 
-                landmarks.append([lmx, lmy])
+    def drive(self, velocity, mc):
+        velocity_x, velocity_y, velocity_z = velocity
+        mc.start_linear_motion(
+                        velocity_x, velocity_y, velocity_z)
 
-            # Drawing landmarks on frames
-            mpDraw.draw_landmarks(frame, handslms, mpHands.HAND_CONNECTIONS)
 
-            # Predict gesture
-            prediction = model.predict([landmarks])
-            # print(prediction)
-            classID = np.argmax(prediction)
-            className = classNames[classID]
+    def check_if_close(self, multiranger, velocity):
+        if is_close(multiranger.front):
+            velocity[0] -= VELOCITY
+        if is_close(multiranger.back):
+            velocity[0] += VELOCITY
 
-    # show the prediction on the frame
-    cv2.putText(frame, className, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 
-                   1, (0,0,255), 2, cv2.LINE_AA)
+        if is_close(multiranger.left):
+            velocity[1] -= VELOCITY
+        if is_close(multiranger.right):
+            velocity[1] += VELOCITY
+        
+        if is_close(multiranger.up):
+            velocity[2] -= VELOCITY
+        if is_close(multiranger.down):
+            velocity[2] += VELOCITY
 
-    # Show the final output
-    cv2.imshow("Output", frame) 
+        return velocity
 
-    if cv2.waitKey(1) == ord('q'):
-        break
+    def input_to_velocity(self, input):
+        if input == 0:
+            return [0.0, 0.1, 0.0]
+        if input == 1:
+            return [0.1, 0.0, 0.0]
+        if input == 2:
+            return [0.0, 0.0, 0.1]
+        return [0.0, 0.0, 0.0]
+            
 
-# release the webcam and destroy all active windows
-cap.release()
+    def spin(self):
+        # Initialize the low-level drivers
+        cflib.crtp.init_drivers()
 
-cv2.destroyAllWindows()
+        cf = Crazyflie(rw_cache='./cache')
+        with SyncCrazyflie(URI, cf=cf) as scf:
+            with MotionCommander(scf) as motion_commander:
+                with Multiranger(scf) as multiranger:
+                    keep_flying = True
+                    for _ in range(2):
+                        for input in inputs:
+                            velocity = self.input_to_velocity(input)
+                            velocity = self.check_if_close(multiranger, velocity)
+                            self.drive(velocity, motion_commander)
+                            time.sleep(0.5)
+
+                print('Demo terminated!')
+                motion_commander.land()
+
+
+
+if __name__ == '__main__':
+    drone = Drone()
+    drone.spin()
