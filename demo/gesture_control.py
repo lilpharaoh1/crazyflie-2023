@@ -3,7 +3,6 @@
 import logging
 import sys
 import time
-from types import NoneType
 import cv2
 import numpy as np
 from sklearn.metrics import pairwise
@@ -261,13 +260,14 @@ class Drone:
                     while (True):
                         ret, frame = cam.read()
                         frame, gray = self.fh.clean_frame(frame)
-                        if not isinstance(self.fh.background, NoneType):
+                        if not isinstance(self.fh.background, None):
                             fingers, gest, frame = self.fh.calc_input(frame, gray)
                             velocity, input = self.fingers_to_velocity(fingers, gest)
                             self.handle_input_thresholding(input)
+                            print("Input : ", self.input)
                             if self.input[1] > INPUT_MIN_THRESH:
                                 velocity = self.check_if_close(multiranger, velocity)
-                                self.drive(velocity, motion_commander)
+                                # self.drive(velocity, motion_commander)
                         cv2.imshow("Finger Count", frame)
                         time.sleep(0.5)
 
