@@ -18,19 +18,12 @@ URI = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
 VELOCITY = 0.5
 INPUT_MIN_THRESH = 136
 
-background = None  # Backtround image that will be averaged together
-background_collect = 0  # Trigger and count to start collecting background
-background_cnt = 0
-background_weight = 0.5  # Start with a halfway point between 0 and 1 of accumulated weight
-
 ROI_TOP = 100  # Region of interest in pixels, where top left is (0,0)
 ROI_BOTTOM = 300
 ROI_LEFT = 10
 ROI_RIGHT = 210
 DEFAULT_BACKGROUND_WEIGHT = 0.5
 DEFAULT_THRESHOLD = 0.7
-
-num_frames = 0
 
 inputs = [0, 1, 2, 3, 2, 1, 0]
 
@@ -93,14 +86,18 @@ class FrameHandler:
     def calc_input(self, frame, gray):
         thresholded = self.segment_hand(gray, DEFAULT_THRESHOLD) # get thresholded hand image
 
+        fingers, gest = 0, 'none'
+
         if thresholded is not None:
             kernel = np.ones((3,3),np.uint8)  # extrapolate the hand to fill dark spots within
             thresholded = cv2.dilate(thresholded,kernel,iterations = 1)
             fingers, gest = self.count_fingers(thresholded) # count the fingers
 
             # Display count and create a circle around the center
-            cv2.putText(frame, str(fingers), (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2)
-            cv2.putText(frame, gest, (0, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2)
+            if gest != 'none':
+                cv2.putText(frame, str(fingers), (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2)
+            else:
+                cv2.putText(frame, gest, (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2)
             max_distance = (ROI_RIGHT - ROI_LEFT) // 2
             radius = int(0.75 * max_distance)
             cv2.circle(frame, (((ROI_LEFT - ROI_RIGHT) // 2)+ROI_RIGHT,((ROI_BOTTOM - ROI_TOP) // 2)+ROI_TOP),radius,150,3)
@@ -111,7 +108,7 @@ class FrameHandler:
 
     def segment_hand(self, frame, threshold):
         # Difference between background and current frame
-        diff = cv2.absdiff(background.astype("uint8"), frame)
+        diff = cv2.absdiff(self.background.astype("uint8"), frame)
 
         # Use a threshold to find the hand in diff
         _ , thresholded = cv2.threshold(diff, threshold, 255, cv2.THRESH_BINARY)
@@ -178,7 +175,7 @@ class FrameHandler:
 class Drone:
     def __init__(self, default_height=0.3):
         self.fh = FrameHandler()
-        self.input = (0, 0)
+        self.input = [0, 0]
 
     def drive(self, velocity, mc):
         velocity_x, velocity_y, velocity_z = velocity
@@ -208,7 +205,7 @@ class Drone:
         if self.input[0] == input:
             self.input[1] += 1
         else:
-            self.input = (input, 0)
+            self.input = [input, 0]
         return
 
     def fingers_to_velocity(self, fingers, gest):
@@ -254,25 +251,33 @@ class Drone:
 
         cf = Crazyflie(rw_cache='./cache')
         with SyncCrazyflie(URI, cf=cf) as scf:
-            with MotionCommander(scf) as motion_commander:
+            with MotionCommander(scf, default_height=0.01) as motion_commander:
                 with Multiranger(scf) as multiranger:
                     keep_flying = True
-                    while (True):
+                    while (keep_flying):
                         ret, frame = cam.read()
                         frame, gray = self.fh.clean_frame(frame)
-                        if not isinstance(self.fh.background, None):
+                        
+                        print(frame.shape)
+                        if not self.fh.background is None:
                             fingers, gest, frame = self.fh.calc_input(frame, gray)
                             velocity, input = self.fingers_to_velocity(fingers, gest)
                             self.handle_input_thresholding(input)
                             print("Input : ", self.input)
                             if self.input[1] > INPUT_MIN_THRESH:
                                 velocity = self.check_if_close(multiranger, velocity)
-                                # self.drive(velocity, motion_commander)
+                                self.drive(velocity, motion_commander)
                         cv2.imshow("Finger Count", frame)
-                        time.sleep(0.5)
-
+                        pressedKey = cv2.waitKey(1)
+                        if pressedKey == ord('q'):  # q to quit
+                            break
+                        elif pressedKey == ord('b'):  # b to create background
+                            self.fh.background_collect = True
                 print('Demo terminated!')
                 motion_commander.land()
+         # Release the camera and destroy all the windows
+        cam.release()
+        cv2.destroyAllWindows()
 
 
 
