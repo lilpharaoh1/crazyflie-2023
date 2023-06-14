@@ -23,7 +23,7 @@ ROI_BOTTOM = 300
 ROI_LEFT = 10
 ROI_RIGHT = 210
 DEFAULT_BACKGROUND_WEIGHT = 0.5
-DEFAULT_THRESHOLD = 0.7
+DEFAULT_THRESHOLD = 12
 
 inputs = [0, 1, 2, 3, 2, 1, 0]
 
@@ -102,6 +102,8 @@ class FrameHandler:
             radius = int(0.75 * max_distance)
             cv2.circle(frame, (((ROI_LEFT - ROI_RIGHT) // 2)+ROI_RIGHT,((ROI_BOTTOM - ROI_TOP) // 2)+ROI_TOP),radius,150,3)
 
+            cv2.imshow("Thresholded", thresholded)  # display the thresholded image
+
         cv2.rectangle(frame, (ROI_LEFT, ROI_TOP), (ROI_RIGHT, ROI_BOTTOM), (255,255,0), 2)
 
         return fingers, gest, frame
@@ -169,6 +171,8 @@ class FrameHandler:
             elif count == 3 and thumb and not pinky:    gesture = 'three thumb'
             elif count == 3 and pinky and thumb:        gesture = 'rock out!'
             else: gesture = str(count)
+
+            cv2.imshow('circ_roi',circular_roi)
         return count, gesture
     
 

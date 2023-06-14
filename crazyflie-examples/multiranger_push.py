@@ -60,7 +60,7 @@ logging.basicConfig(level=logging.ERROR)
 
 
 def is_close(range):
-    MIN_DISTANCE = 0.2  # m
+    MIN_DISTANCE = 0.5  # m
 
     if range is None:
         return False
