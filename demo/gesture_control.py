@@ -95,9 +95,9 @@ class FrameHandler:
 
             # Display count and create a circle around the center
             if gest != 'none':
-                cv2.putText(frame, str(fingers), (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2)
-            else:
                 cv2.putText(frame, gest, (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2)
+            else:
+                cv2.putText(frame, str(fingers), (0, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2)
             max_distance = (ROI_RIGHT - ROI_LEFT) // 2
             radius = int(0.75 * max_distance)
             cv2.circle(frame, (((ROI_LEFT - ROI_RIGHT) // 2)+ROI_RIGHT,((ROI_BOTTOM - ROI_TOP) // 2)+ROI_TOP),radius,150,3)
@@ -162,6 +162,12 @@ class FrameHandler:
                 if count > 5:
                     count = 5
 
+            # Add conditions to recognize thumb and pinky based on distance from center
+            if not thumb:
+                thumb = ((cX + (cX * 0.6)) < (x + w/2)) and out_of_wrist
+            if not pinky:
+                pinky = ((cX - (cX * 0.4)) > (x + w/2)) and out_of_wrist
+
             # Additional gestures from thumb and pinky recognition
             if count == 1 and thumb:                    gesture = 'thumb'
             elif count == 1 and pinky:                  gesture = 'pinky'
@@ -214,22 +220,22 @@ class Drone:
 
     def fingers_to_velocity(self, fingers, gest):
         if gest == 'thumb': # Right
-            velocity = [0.0, 0.1, 0.0]
+            velocity = [0.0, 0.8, 0.0]
             input = 'right'
         elif gest == 'pinky': # Left
-            velocity = [0.0, -0.1, 0.0]
+            velocity = [0.0, -0.8, 0.0]
             input = 'left'
         elif gest == 'horns': # Forward
-            velocity = [0.1, 0.0, 0.0]
+            velocity = [0.8, 0.0, 0.0]
             input = 'forward'
         elif gest == 'rock out!': # Backward
-            velocity = [-0.1, 0.0, 0.0]
+            velocity = [-0.8, 0.0, 0.0]
             input = 'backward'
         elif gest == '1': # Up
-            velocity = [0.0, 0.0, 0.1]
+            velocity = [0.0, 0.0, 0.8]
             input = 'up'
         elif gest == '2': # Down
-            velocity = [0.0, 0.0, -0.1]
+            velocity = [0.0, 0.0, -0.8]
             input = 'down'
         else:
             velocity = [0.0, 0.0, 0.0]
@@ -239,11 +245,11 @@ class Drone:
 
     def input_to_velocity(self, input):
         if input == 0:
-            return [0.0, 0.1, 0.0]
+            return [0.0, 0.8, 0.0]
         if input == 1:
-            return [0.1, 0.0, 0.0]
+            return [0.8, 0.0, 0.0]
         if input == 2:
-            return [0.0, 0.0, 0.1]
+            return [0.0, 0.0, 0.8]
         return [0.0, 0.0, 0.0]
             
 
@@ -255,22 +261,23 @@ class Drone:
 
         cf = Crazyflie(rw_cache='./cache')
         with SyncCrazyflie(URI, cf=cf) as scf:
-            with MotionCommander(scf, default_height=0.01) as motion_commander:
+            with MotionCommander(scf, default_height=0.3) as motion_commander:
                 with Multiranger(scf) as multiranger:
                     keep_flying = True
                     while (keep_flying):
                         ret, frame = cam.read()
                         frame, gray = self.fh.clean_frame(frame)
                         
-                        print(frame.shape)
                         if not self.fh.background is None:
                             fingers, gest, frame = self.fh.calc_input(frame, gray)
                             velocity, input = self.fingers_to_velocity(fingers, gest)
                             self.handle_input_thresholding(input)
-                            print("Input : ", self.input)
                             if self.input[1] > INPUT_MIN_THRESH:
                                 velocity = self.check_if_close(multiranger, velocity)
+                                print(self.input[0], velocity)
                                 self.drive(velocity, motion_commander)
+                                print("self.drive done")
+                                self.drive([0.0, 0.0, 0.0], motion_commander)
                         cv2.imshow("Finger Count", frame)
                         pressedKey = cv2.waitKey(1)
                         if pressedKey == ord('q'):  # q to quit
