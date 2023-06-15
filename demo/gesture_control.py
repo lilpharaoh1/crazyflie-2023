@@ -16,7 +16,7 @@ from cflib.utils.multiranger import Multiranger
 
 URI = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
 VELOCITY = 0.5
-INPUT_MIN_THRESH = 136
+INPUT_MIN_THRESH = 50
 
 ROI_TOP = 100  # Region of interest in pixels, where top left is (0,0)
 ROI_BOTTOM = 300
@@ -24,6 +24,7 @@ ROI_LEFT = 10
 ROI_RIGHT = 210
 DEFAULT_BACKGROUND_WEIGHT = 0.5
 DEFAULT_THRESHOLD = 12
+DEFAULT_VELOCITY = 0.4
 
 inputs = [0, 1, 2, 3, 2, 1, 0]
 
@@ -220,22 +221,22 @@ class Drone:
 
     def fingers_to_velocity(self, fingers, gest):
         if gest == 'thumb': # Right
-            velocity = [0.0, 0.8, 0.0]
+            velocity = [0.0, DEFAULT_VELOCITY, 0.0]
             input = 'right'
         elif gest == 'pinky': # Left
-            velocity = [0.0, -0.8, 0.0]
+            velocity = [0.0, -DEFAULT_VELOCITY, 0.0]
             input = 'left'
         elif gest == 'horns': # Forward
-            velocity = [0.8, 0.0, 0.0]
+            velocity = [DEFAULT_VELOCITY, 0.0, 0.0]
             input = 'forward'
         elif gest == 'rock out!': # Backward
-            velocity = [-0.8, 0.0, 0.0]
+            velocity = [-DEFAULT_VELOCITY, 0.0, 0.0]
             input = 'backward'
         elif gest == '1': # Up
-            velocity = [0.0, 0.0, 0.8]
+            velocity = [0.0, 0.0, DEFAULT_VELOCITY]
             input = 'up'
         elif gest == '2': # Down
-            velocity = [0.0, 0.0, -0.8]
+            velocity = [0.0, 0.0, -DEFAULT_VELOCITY]
             input = 'down'
         else:
             velocity = [0.0, 0.0, 0.0]
@@ -245,11 +246,11 @@ class Drone:
 
     def input_to_velocity(self, input):
         if input == 0:
-            return [0.0, 0.8, 0.0]
+            return [0.0, DEFAULT_VELOCITY, 0.0]
         if input == 1:
-            return [0.8, 0.0, 0.0]
+            return [DEFAULT_VELOCITY, 0.0, 0.0]
         if input == 2:
-            return [0.0, 0.0, 0.8]
+            return [0.0, 0.0, DEFAULT_VELOCITY]
         return [0.0, 0.0, 0.0]
             
 
@@ -276,8 +277,10 @@ class Drone:
                                 velocity = self.check_if_close(multiranger, velocity)
                                 print(self.input[0], velocity)
                                 self.drive(velocity, motion_commander)
+                                time.sleep(1)
                                 print("self.drive done")
                                 self.drive([0.0, 0.0, 0.0], motion_commander)
+                                self.input[1] = 0
                         cv2.imshow("Finger Count", frame)
                         pressedKey = cv2.waitKey(1)
                         if pressedKey == ord('q'):  # q to quit
